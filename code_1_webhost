@@ -1,0 +1,58 @@
+import network
+import socket
+import time
+from machine import Pin, ADC
+
+# Wi-Fi credentials
+SSID = "exoflypi"
+PASSWORD = "exoflypi"
+
+# Set up Wi-Fi
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect(SSID, PASSWORD)
+
+# Wait for connection
+while not wlan.isconnected():
+    print("Connecting to Wi-Fi...")
+    time.sleep(1)
+
+print("Connected! Pico W IP:", wlan.ifconfig()[0])
+
+# UDP setup
+UDP_IP = "192.168.167.191"  # Laptop IP
+UDP_PORT = 12345             # Must match the laptop server port
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# Multiplexer control pins
+S1 = Pin(2, Pin.OUT)  
+S0 = Pin(3, Pin.OUT)
+
+# ADC pin (Assuming you're using GP26/ADC0)
+adc = ADC(Pin(26))
+
+# Function to select multiplexer channel
+def select_channel(channel):
+    control_bits = [(channel >> 1) & 1, channel & 1]
+    S1.value(control_bits[0])
+    S0.value(control_bits[1])
+
+try:
+    while True:
+        for channel in range(4):  # Assuming 4 channels
+            select_channel(channel)
+            time.sleep(0.1)  # Allow settling time
+            
+            analog_value = adc.read_u16()  # Read 16-bit ADC value
+            message = f"CH{channel}: {analog_value}"  # Format message
+            
+            # Send data to laptop via UDP
+            sock.sendto(message.encode(), (UDP_IP, UDP_PORT))
+            print(f"Sent: {message}")
+
+            time.sleep(1)  # Send data every second
+
+except KeyboardInterrupt:
+    print("Stopping...")
+
+
